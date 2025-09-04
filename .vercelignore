@@ -6,6 +6,5 @@ node_modules
 .DS_Store
 poc/
 scripts/
-helius-sdk/
 .cursor/
 .vscode/

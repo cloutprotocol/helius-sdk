@@ -1,4 +1,4 @@
-import { Helius } from 'helius-sdk';
+import { Helius, TransactionType, WebhookType } from 'helius-sdk';
 import { Connection, PublicKey } from '@solana/web3.js';
 
 // Initialize Helius client
@@ -39,7 +39,6 @@ export interface TradeData {
 export async function parseTransaction(signature: string): Promise<TradeData | null> {
   try {
     const transaction = await connection.getTransaction(signature, {
-      encoding: 'jsonParsed',
       maxSupportedTransactionVersion: 0,
     });
 
@@ -47,18 +46,46 @@ export async function parseTransaction(signature: string): Promise<TradeData | n
       return null;
     }
 
+    // Get transaction message and account keys
+    const txMessage = transaction.transaction.message;
+    let instructions: any[] = [];
+    let accountKeys: string[] = [];
+    
+    if ('instructions' in txMessage) {
+      // Legacy transaction
+      instructions = txMessage.instructions;
+      accountKeys = txMessage.accountKeys.map((key: any) => key.toString());
+    } else if ('compiledInstructions' in txMessage) {
+      // Versioned transaction - get account keys from transaction
+      instructions = txMessage.compiledInstructions;
+      // For versioned transactions, account keys are in the transaction object
+      if (transaction.transaction.message.staticAccountKeys) {
+        accountKeys = transaction.transaction.message.staticAccountKeys.map((key: any) => key.toString());
+      }
+    }
+    
     // Check if this transaction involves the PumpSwap program
-    const isPumpSwapTx = transaction.transaction.message.instructions.some(
-      (instruction: any) => 
-        instruction.programId === PUMPSWAP_PROGRAM_ID.toString()
+    const isPumpSwapTx = instructions.some(
+      (instruction: any) => {
+        if ('programId' in instruction) {
+          return instruction.programId?.toString() === PUMPSWAP_PROGRAM_ID.toString();
+        }
+        if ('programIdIndex' in instruction) {
+          const programId = accountKeys[instruction.programIdIndex];
+          return programId === PUMPSWAP_PROGRAM_ID.toString();
+        }
+        return false;
+      }
     );
 
     if (!isPumpSwapTx) {
       return null;
     }
-
-    // Extract trader (first signer)
-    const traderAddress = transaction.transaction.message.accountKeys[0]?.pubkey?.toString();
+    
+    const traderAddress = Array.isArray(accountKeys) && accountKeys.length > 0 
+      ? accountKeys[0] 
+      : null;
+    
     if (!traderAddress) {
       return null;
     }
@@ -70,8 +97,8 @@ export async function parseTransaction(signature: string): Promise<TradeData | n
     const postTokenBalances = transaction.meta.postTokenBalances || [];
 
     // Find SOL balance change for the trader
-    const traderIndex = transaction.transaction.message.accountKeys.findIndex(
-      (key: any) => key.pubkey === traderAddress
+    const traderIndex = accountKeys.findIndex(
+      (key: string) => key === traderAddress
     );
 
     if (traderIndex === -1) {
@@ -136,9 +163,9 @@ export async function setupPumpSwapWebhook(webhookUrl: string) {
   try {
     const webhook = await helius.createWebhook({
       webhookURL: webhookUrl,
-      transactionTypes: ['Any'], // Monitor all transaction types
+      transactionTypes: [TransactionType.ANY],
       accountAddresses: [PUMPSWAP_PROGRAM_ID.toString()],
-      webhookType: 'enhanced',
+      webhookType: WebhookType.ENHANCED,
     });
 
     console.log('Webhook created:', webhook);
