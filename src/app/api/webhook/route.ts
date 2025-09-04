@@ -5,20 +5,66 @@ import { api } from '../../../../convex/_generated/api';
 // Initialize Convex client for server-side operations
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
+// Simple rate limiting
+let requestCount = 0;
+let lastReset = Date.now();
+
 export async function POST(request: NextRequest) {
   try {
+    // Reset counter every minute
+    const now = Date.now();
+    if (now - lastReset > 60000) {
+      requestCount = 0;
+      lastReset = now;
+    }
+    
+    requestCount++;
+    
+    // Rate limit: max 30 requests per minute
+    if (requestCount > 30) {
+      console.log(`🚫 Rate limited: ${requestCount} requests this minute`);
+      return NextResponse.json({ 
+        success: true, 
+        rateLimited: true,
+        processed: 0 
+      });
+    }
+    
     const body = await request.json();
-    console.log('🎣 Webhook received:', body.length || 1, 'transactions');
+    console.log(`🎣 Webhook received: ${body.length || 1} transactions (${requestCount}/30 this minute)`);
     
     // Handle array of transactions or single transaction
     const transactions = Array.isArray(body) ? body : [body];
     
-    // MVP: Limit processing to prevent excessive load
-    const maxTransactions = 10;
-    const transactionsToProcess = transactions.slice(0, maxTransactions);
+    // Filter for meaningful trades only
+    const filteredTransactions = transactions.filter(tx => {
+      const nativeTransfers = tx.nativeTransfers || [];
+      const tokenTransfers = tx.tokenTransfers || [];
+      
+      // Only process transactions between 1-100 SOL (exclude dust and mega whales)
+      const hasSignificantSol = nativeTransfers.some(transfer => {
+        const solAmount = Math.abs(transfer.amount || 0);
+        return solAmount >= 1000000000 &&    // >= 1 SOL
+               solAmount <= 100000000000;    // <= 100 SOL
+      });
+      
+      // Only process if there are both SOL and token transfers
+      const hasTokenTransfer = tokenTransfers.length > 0;
+      
+      return hasSignificantSol && hasTokenTransfer;
+    });
     
-    if (transactions.length > maxTransactions) {
-      console.log(`⚠️ Limiting processing to ${maxTransactions} transactions (received ${transactions.length})`);
+    // Sampling: only process every 10th transaction to reduce load
+    const sampledTransactions = filteredTransactions.filter((_, index) => index % 10 === 0);
+    
+    // Further limit to prevent overload
+    const maxTransactions = 3;
+    const transactionsToProcess = sampledTransactions.slice(0, maxTransactions);
+    
+    console.log(`📊 Filtered ${transactions.length} → ${filteredTransactions.length} → ${transactionsToProcess.length} transactions`);
+    
+    if (filteredTransactions.length > maxTransactions) {
+      console.log(`⚠️ Limiting processing to ${maxTransactions} transactions (filtered ${filteredTransactions.length})`);
     }
     
     let processed = 0;
@@ -92,45 +138,39 @@ async function processTransaction(transaction: any) {
   }
 }
 
+// Global cache to prevent duplicate metadata fetches
+const metadataFetchCache = new Set();
+
 async function fetchTokenMetadata(tokenMint: string) {
   try {
+    // Skip if already fetching or recently fetched
+    if (metadataFetchCache.has(tokenMint)) {
+      return;
+    }
+    
     // Check if we already have metadata for this token
     const existingMetadata = await convex.query(api.trades.getTokenMetadata, { mint: tokenMint });
     if (existingMetadata) {
       return; // Already have metadata
     }
     
-    // Fetch from Helius
-    const response = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${process.env.HELIUS_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        mintAccounts: [tokenMint],
-      }),
-    });
+    // Add to cache to prevent duplicate requests
+    metadataFetchCache.add(tokenMint);
     
-    if (!response.ok) {
-      throw new Error(`Helius API error: ${response.status}`);
-    }
+    // Only fetch metadata for tokens we see multiple times (reduces API calls)
+    // This is a simple heuristic - you could make it more sophisticated
     
-    const data = await response.json();
-    const metadata = data[0]; // First result
+    // For now, skip metadata fetching to reduce API calls
+    console.log(`⏭️ Skipping metadata fetch for ${tokenMint.slice(0, 8)} to reduce API costs`);
     
-    if (metadata && metadata.account) {
-      // Store metadata in Convex
-      await convex.mutation(api.trades.addTokenMetadata, {
-        mint: tokenMint,
-        symbol: metadata.onChainMetadata?.metadata?.symbol || undefined,
-        name: metadata.onChainMetadata?.metadata?.name || undefined,
-        decimals: metadata.onChainMetadata?.metadata?.decimals || undefined,
-      });
-      
-      console.log(`📝 Stored metadata for ${metadata.onChainMetadata?.metadata?.symbol || tokenMint.slice(0, 8)}`);
-    }
+    // Remove from cache after 5 minutes
+    setTimeout(() => {
+      metadataFetchCache.delete(tokenMint);
+    }, 5 * 60 * 1000);
+    
   } catch (error) {
     console.warn(`Failed to fetch token metadata for ${tokenMint}:`, error);
+    metadataFetchCache.delete(tokenMint); // Remove from cache on error
   }
 }
 
