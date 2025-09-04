@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
+// import { ConvexHttpClient } from 'convex/browser';
+// import { api } from '../../../../convex/_generated/api';
 
 // Initialize Convex client for server-side operations
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+// const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,7 +71,7 @@ async function processTransaction(transaction: any) {
     console.log(`💱 Trade detected: ${tradeData.direction} ${tradeData.tokenAmount} tokens for ${tradeData.solAmount} SOL`);
     
     // Store the trade in Convex
-    await convex.mutation(api.trades.processTrade, tradeData);
+    // await convex.mutation(api.trades.processTrade, tradeData);
     console.log(`✅ Trade stored: ${signature.slice(0, 8)}...`);
   } else {
     console.log(`⚪ No trade data found in: ${signature.slice(0, 8)}...`);
