@@ -31,7 +31,7 @@ In your Vercel dashboard, add these environment variables:
 HELIUS_API_KEY=293b7c61-f831-4427-82a3-c87d62af1e8c
 HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=293b7c61-f831-4427-82a3-c87d62af1e8c
 PUMPSWAP_PROGRAM_ID=pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA
-NEXT_PUBLIC_CONVEX_URL=https://your-production-convex-url.convex.cloud
+NEXT_PUBLIC_CONVEX_URL=https://exciting-nightingale-175.convex.cloud
 CONVEX_DEPLOYMENT=your-production-deployment-name
 ```
 

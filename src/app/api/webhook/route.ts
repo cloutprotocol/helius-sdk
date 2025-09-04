@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-// import { ConvexHttpClient } from 'convex/browser';
-// import { api } from '../../../../convex/_generated/api';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '../../../../convex/_generated/api';
 
 // Initialize Convex client for server-side operations
-// const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,10 +13,18 @@ export async function POST(request: NextRequest) {
     // Handle array of transactions or single transaction
     const transactions = Array.isArray(body) ? body : [body];
     
+    // MVP: Limit processing to prevent excessive load
+    const maxTransactions = 10;
+    const transactionsToProcess = transactions.slice(0, maxTransactions);
+    
+    if (transactions.length > maxTransactions) {
+      console.log(`⚠️ Limiting processing to ${maxTransactions} transactions (received ${transactions.length})`);
+    }
+    
     let processed = 0;
     let errors = 0;
     
-    for (const transaction of transactions) {
+    for (const transaction of transactionsToProcess) {
       try {
         await processTransaction(transaction);
         processed++;
@@ -70,8 +78,8 @@ async function processTransaction(transaction: any) {
   if (tradeData) {
     console.log(`💱 Trade detected: ${tradeData.direction} ${tradeData.tokenAmount} tokens for ${tradeData.solAmount} SOL`);
     
-    // Store the trade in Convex
-    // await convex.mutation(api.trades.processTrade, tradeData);
+    // Store the trade in Convex (single efficient mutation)
+    await convex.mutation(api.trades.processTrade, tradeData);
     console.log(`✅ Trade stored: ${signature.slice(0, 8)}...`);
   } else {
     console.log(`⚪ No trade data found in: ${signature.slice(0, 8)}...`);

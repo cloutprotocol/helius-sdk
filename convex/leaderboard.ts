@@ -8,7 +8,7 @@ export const getLeaderboard = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { period, limit = 100 } = args;
+    const { period, limit = 50 } = args; // Reduced for MVP efficiency
     
     // Try to get cached data first
     const cached = await ctx.db
@@ -16,9 +16,9 @@ export const getLeaderboard = query({
       .withIndex("by_period", (q) => q.eq("period", period))
       .first();
     
-    // If cache is fresh (less than 5 minutes old), return it
+    // If cache is fresh (less than 2 minutes old for MVP), return it
     const now = Date.now();
-    if (cached && (now - cached.lastUpdated) < 5 * 60 * 1000) {
+    if (cached && (now - cached.lastUpdated) < 2 * 60 * 1000) {
       return cached.data.slice(0, limit);
     }
     
