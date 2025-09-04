@@ -1,0 +1,20 @@
+{
+  "name": "pump-loss-poc",
+  "version": "1.0.0",
+  "description": "Simple proof of concept for Pump Loss",
+  "main": "simple-test.js",
+  "scripts": {
+    "test": "node working-test.js",
+    "simple": "node simple-connection-test.js",
+    "original": "node simple-test.js",
+    "webhook-test": "node webhook-test.js",
+    "monitor": "node live-monitor.js",
+    "scale": "node scalability-test.js",
+    "realistic": "node realistic-test.js",
+    "production": "node production-ready-test.js"
+  },
+  "dependencies": {
+    "helius-sdk": "^1.5.3",
+    "@solana/web3.js": "^1.95.0"
+  }
+}

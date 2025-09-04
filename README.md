@@ -1,173 +1,206 @@
-# Helius Node.js SDK
+# Pump Loss - Live PumpSwap Trading Loss Leaderboard
 
-[![Version](https://img.shields.io/npm/v/helius-sdk)](https://www.npmjs.org/package/helius-sdk)
-![Downloads](https://img.shields.io/npm/dm/helius-sdk)
+A real-time web application that displays the biggest trading losses on PumpSwap AMM (Solana). Built with Next.js, Convex, and Helius SDK.
 
-The Helius Node.js library provides access to the Helius API from JavaScript/TypeScript.
+## 🚀 Features
 
-## Documentation
+- **Real-time leaderboard** of biggest trading losses
+- **Live data ingestion** from Solana blockchain via Helius webhooks
+- **Accurate PNL calculations** using Weighted Average Cost methodology
+- **Wallet detail views** with comprehensive trading history
+- **Multiple time periods**: 24h, 7d, All-time
+- **Responsive design** optimized for all devices
 
-API reference documentation is available at [docs.helius.dev](https://docs.helius.dev).
+## 🏗️ Tech Stack
 
-## Contributions
+- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
+- **Backend**: Convex (serverless database with real-time subscriptions)
+- **Blockchain**: Helius SDK, Solana Web3.js
+- **Deployment**: Vercel + Convex Cloud
 
-Interested in contributing? Read the following [contributions guide...](https://github.com/helius-labs/helius-sdk/blob/main/CONTRIBUTING.md).
+## 📋 Prerequisites
 
-## Installation
+- Node.js 18+
+- Helius API key (get one at [helius.xyz](https://helius.xyz))
+- Convex account (sign up at [convex.dev](https://convex.dev))
 
-Using npm:
+## 🛠️ Setup Instructions
 
-```shell
-npm install helius-sdk
+### 1. Clone and Install Dependencies
+
+```bash
+git clone <your-repo>
+cd pump-loss
+npm install
 ```
 
-Using yarn:
+### 2. Set up Convex
 
-```shell
-yarn add helius-sdk
+```bash
+# Install Convex CLI globally
+npm install -g convex
+
+# Initialize Convex project
+npx convex dev
 ```
 
-## Usage
+This will:
+- Create a new Convex deployment
+- Generate the `convex/_generated` folder
+- Set up your `.env.local` with Convex URLs
 
-The package needs to be configured with your account's API key, which is available in the [Helius Dashboard](https://dev.helius.xyz/dashboard/app).
+### 3. Configure Environment Variables
 
-```js
-import { Helius } from 'helius-sdk';
+Update your `.env.local` file:
 
-// Replace YOUR_API_KEY with the API key from your Helius dashboard
-const helius = new Helius('YOUR_API_KEY');
+```env
+# Helius Configuration (already set)
+HELIUS_API_KEY=293b7c61-f831-4427-82a3-c87d62af1e8c
+HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=293b7c61-f831-4427-82a3-c87d62af1e8c
 
-const getAssetsByOwner = async () => {
-  const response = await helius.rpc.getAssetsByOwner({
-    ownerAddress: '86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY',
-    page: 1,
-  });
-  console.log(response.items);
-};
+# Convex Configuration (set by convex dev)
+CONVEX_DEPLOYMENT=your-deployment-name
+NEXT_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
 
-getAssetsByOwner();
+# PumpSwap Configuration
+PUMPSWAP_PROGRAM_ID=pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA
+
+# Webhook Configuration
+WEBHOOK_SECRET=your-webhook-secret-here
 ```
 
-[![Try it out](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/edit/helius-node-js-sdk-xbw7t6?file=index.js)
+### 4. Set up Helius Webhook
 
-## Handling errors
+Create a webhook to monitor PumpSwap transactions:
 
-When the API returns a non-success status code (4xx or 5xx response), an error message will be thrown:
-
-```ts
-try {
-  const response = await helius.rpc.getAssetsByOwner({
-    ownerAddress: '86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY',
-    page: 1,
-  });
-  console.log(response.items);
-} catch (error) {
-  console.log(error);
-}
+```bash
+# Run this script to set up the webhook
+node scripts/setup-webhook.js
 ```
 
-### Common Error Codes
+Or manually create via Helius dashboard:
+- **Webhook URL**: `https://your-domain.vercel.app/api/webhook`
+- **Account Addresses**: `pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`
+- **Transaction Types**: `Any`
+- **Webhook Type**: `Enhanced`
 
-When working with the Helius SDK, you may encounter several error codes. Below is a table detailing some of the common error codes along with additional information to help you troubleshoot:
+### 5. Start Development
 
-| Error Code | Error Message         | More Information                                                                                       |
-| ---------- | --------------------- | ------------------------------------------------------------------------------------------------------ |
-| 401        | Unauthorized          | This occurs when an invalid API key is provided or access is restricted due to RPC rules.              |
-| 429        | Too Many Requests     | This indicates that the user has exceeded the request limit in a given timeframe or is out of credits. |
-| 5XX        | Internal Server Error | This is a generic error message for server-side issues. Please contact Helius support for assistance.  |
+```bash
+# Terminal 1: Start Convex backend
+npx convex dev
 
-If you encounter any of these errors, refer to the Helius documentation for further guidance, or reach out to the Helius support team for more detailed assistance.
+# Terminal 2: Start Next.js frontend
+npm run dev
+```
 
-## Using the Helius SDK
+Visit `http://localhost:3000` to see the application.
 
-Our SDK is designed to give you a seamless experience when building on Solana. We've separated the core functionality into various segments.
+## 📊 How It Works
 
-[**DAS API**](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#das-api-digital-asset-standard)
+### Data Flow
 
-Comprehensive and performant API for tokens, NFTs, and compressed NFTs on Solana.
+1. **Helius Webhooks** → Monitor PumpSwap program transactions
+2. **Webhook Handler** → Parse and validate incoming transactions
+3. **Convex Functions** → Process trades and calculate PNL
+4. **Real-time Updates** → Push changes to connected clients
+5. **Frontend** → Display live leaderboard
 
-- [`getAsset()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getasset): Get an asset by its ID.
-- [`getAssetBatch()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getassetbatch): Get multiple assets by ID (up to 1k).
-- [`getSignaturesForAsset()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getsignaturesforasset): Get a list of transaction signatures related to a compressed asset.
-- [`searchAssets()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#searchassets): Search for assets by a variety of parameters. Very useful for token-gating!
-- [`getAssetProof()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getassetproof): Get a Merkle proof for a compressed asset by its ID.
-- [`getAssetsByOwner()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getassetsbyowner): Get a list of assets owned by an address. This is the fastest way to get all the NFTs and fungible tokens that are owned by a wallet on Solana.
-- [`getAssetsByGroup()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getassetsbygroup): Get a list of assets by a group key and value. This endpoint is very useful for getting the mint list for NFT Collections.
-- [`getAssetsByCreator()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getassetsbycreator): Get a list of assets created by an address.
-- [`getAssetsByAuthority()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getassetsbyauthority): Get a list of assets with a specific authority.
-- [`getTokenAccounts()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#gettokenaccounts): Get information about all token accounts for a specific mint or a specific owner.
-- [`getNftEditions()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getnfteditions): Get information about all the edition NFTs for a specific master NFT
+### PNL Calculation
 
-[**Staking**](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#staking)
+- Uses **Weighted Average Cost (WAC)** methodology
+- Triggered only on **SELL** transactions
+- Formula: `Realized PNL = SOL Received - (Tokens Sold × WAC)`
+- Tracks cost basis per wallet per token
 
-The easiest way to stake with Helius programmatically.
+## 🚀 Deployment
 
-- [`createStakeTransaction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#createstaketransaction): Generate a transaction to create + delegate a new stake account to the Helius validator.
-- [`createUnstakeTransaction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#createunstaketransaction): Generate a transaction to deactivate a stake account.
-- [`createWithdrawTransaction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#createwithdrawtransaction): Generate a transaction to withdraw lamports from a stake account (after cooldown).
-- [`getStakeInstructions()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getstakeinstructions): Return only the instructions for creating and delegating a stake account.
-- [`getUnstakeInstruction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getunstakeinstruction): Return the instruction to deactivate a stake account.
-- [`getWithdrawInstruction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getwithdrawinstruction): Return the instruction to withdraw lamports from a stake account.
-- [`getWithdrawableAmount()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getwithdrawableamount): Determine how many lamports are withdrawable (with optional rent-exempt inclusion).
-- [`getHeliusStakeAccounts()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getheliusstakeaccounts): Return all stake accounts delegated to the Helius validator for a given wallet.
+### Deploy to Vercel
 
-[**Mint API**](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#mint)
+```bash
+# Deploy Convex functions
+npx convex deploy --prod
 
-The easiest way to mint compressed NFTs at scale.
+# Deploy frontend to Vercel
+vercel deploy --prod
+```
 
-Note, this API has been deprecated and the relevant methods will be removed in a future release. Please refer to [ZK Compression](https://docs.helius.dev/zk-compression-and-photon-api/what-is-zk-compression-on-solana) for all future compression-related work
+### Update Webhook URL
 
-- [`mintCompressedNft()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#mintcompressednft): Mint a new compressed NFT.
-- [`delegateCollectionAuthority()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#delegatecollectionauthority-and-revokecollectionauthority): Delegates collection authority to a new address.
-- [`revokeCollectionAuthority()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#delegatecollectionauthority-and-revokecollectionauthority): Revokes collection authority from an address.
-- [`getMintlist()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getmintlist) Get all the tokens for an NFT collection.
+After deployment, update your Helius webhook URL to point to your production domain:
+`https://your-domain.vercel.app/api/webhook`
 
-[**Webhooks**](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#webhooks)
+## 📁 Project Structure
 
-Provides methods for setting up, editing, and managing webhooks, crucial for listening to on-chain Solana events (e.g., sales, listings, swaps) and triggering actions when these events happen.
+```
+pump-loss/
+├── convex/                 # Convex backend functions
+│   ├── schema.ts          # Database schema
+│   ├── trades.ts          # Trade processing logic
+│   └── leaderboard.ts     # Leaderboard queries
+├── lib/                   # Utility libraries
+│   └── helius.ts         # Helius SDK integration
+├── src/
+│   ├── app/              # Next.js app router
+│   │   ├── api/webhook/  # Webhook endpoint
+│   │   └── page.tsx      # Main leaderboard page
+│   └── components/       # React components
+├── .env.local            # Environment variables
+└── package.json
+```
 
-- [`createWebhook()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#createwebhook): Creates a new webhook with the provided request.
-- [`editWebhook()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#editwebhook): Edits an existing webhook by its ID with the provided request.
-- [`appendAddressesToWebhook()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#appendaddressestowebhook): Append new addresses to an existing webhook.
-- [`removeAddressesFromWebhook()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#removeaddressesfromwebhook): Remove addresses from an existing webhook.
-- [`deleteWebhook()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#deletewebhook): Deletes a webhook by its ID.
-- [`getWebhookByID()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getwebhookbyid): Retrieves a single webhook by its ID.
-- [`getAllWebhooks()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getallwebhooks): Retrieves a list of all webhooks.
+## 🔧 Key Components
 
+### Convex Schema
+- `trades`: All PumpSwap transactions
+- `wallets`: Wallet metadata
+- `tokenCostBasis`: Cost basis tracking
+- `realizedPnl`: PNL calculation results
+- `leaderboardCache`: Performance optimization
 
-[**Smart Transactions**](https://docs.helius.dev/solana-rpc-nodes/sending-transactions-on-solana#sending-smart-transactions)
+### API Endpoints
+- `POST /api/webhook`: Helius webhook handler
+- Convex queries: Real-time leaderboard data
 
-- [`createSmartTransaction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#createsmarttransaction): Creates a smart transaction with the provided configuration
-- [`getComputeUnits()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getcomputeunits): Simulates a transaction to get the total compute units consumed
-- [`pollTransactionConfirmation()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#polltransactionconfirmation): Polls a transaction to check whether it has been confirmed
-- [`sendSmartTransaction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#sendsmarttransaction): Builds and sends an optimized transaction
+## 📈 Performance Optimizations
 
-[**Jito Smart Transactions and Helper Methods**](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#jito-smart-transactions-and-helper-methods)
+- **Caching**: Leaderboard results cached for 5 minutes
+- **Indexing**: Optimized database indexes for fast queries
+- **Real-time**: Convex subscriptions for instant updates
+- **Serverless**: Auto-scaling with Convex and Vercel
 
-- [`addTipInstruction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#addtipinstruction): Adds a tip instruction as the last instruction given the provided instructions
-- [`createSmartTransactionWithTip()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#createsmarttransactionwithtip): Creates a smart transaction with a Jito tip
-- [`getBundleStatuses()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getbundlestatuses): Gets the status of the provided bundles
-- [`sendJitoBundle()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#sendjitobundle): Sends a bundle of transactions to the Jito Block Engine
-- [`sendSmartTransactionWithTip()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#sendsmarttransactionwithtip): Sends a smart transaction as a Jito bundle with a tip
+## 🛡️ Security & Reliability
 
-[**Enhanced RPC Methods (V2)**](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#enhanced-rpc-methods-v2)
+- **Webhook verification**: Validates Helius signatures
+- **Idempotent processing**: Handles duplicate transactions
+- **Error handling**: Comprehensive error recovery
+- **Rate limiting**: Protects against abuse
 
-New paginated RPC methods with cursor-based pagination for efficient data retrieval.
+## 🔍 Monitoring
 
-- [`getProgramAccountsV2()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/rpc/getProgramAccountsV2.ts): Get program accounts with pagination support and changedSinceSlot for incremental updates.
-- [`getAllProgramAccounts()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/rpc/getProgramAccountsV2.ts): Auto-paginate through all program accounts (use with caution for large programs).
-- [`getTokenAccountsByOwnerV2()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/rpc/getTokenAccountsByOwnerV2.ts): Get token accounts by owner with pagination and filters.
-- [`getAllTokenAccountsByOwner()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/rpc/getTokenAccountsByOwnerV2.ts): Auto-paginate through all token accounts for an owner.
+- **Convex Dashboard**: Real-time function metrics
+- **Vercel Analytics**: Frontend performance
+- **Custom logging**: Transaction processing status
 
-[**Helper Methods**](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#helper-methods)
+## 🤝 Contributing
 
-Offers additional tools for various Solana-related tasks like analyzing blockchain throughput and tracking stake accounts and SPL token holders.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-- [`getCurrentTPS()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getcurrenttps): Returns the current transactions per second (TPS) rate — including voting transactions.
-- [`airdrop()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#airdrop): Request an allocation of lamports to the specified address
-- [`getStakeAccounts()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getstakeaccounts): Returns all the stake accounts for a given public key.
-- [`getTokenHolders()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#gettokenholders): Returns all the token accounts for a given mint address (ONLY FOR SPL TOKENS).
-- [`getPriorityFeeEstimate()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#getpriorityfeeestimate): Returns an estimated priority fee based on a set of predefined priority levels (percentiles).
-- [`sendTransaction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#sendtransaction): Wrapper for `sendTransaction` RPC call that includes support for `validatorAcls` parameter.
-- [`broadcastTransaction()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#broadcasttransaction): Broadcasts a fully signed transaction (object or serialized) and polls for its confirmation.
-- [`executeJupiterSwap()`](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#executejupiterswap): Execute a token swap using Jupiter Exchange with automatic transaction optimizations including priority fees, compute unit calculation, and reliable transaction confirmation.
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+## ⚠️ Disclaimers
+
+- For entertainment and educational purposes only
+- Not financial advice
+- Data accuracy not guaranteed
+- Use at your own risk
+
+---
+
+Built with ❤️ for the Solana degen community
