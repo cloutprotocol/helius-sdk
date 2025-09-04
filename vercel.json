@@ -1,0 +1,19 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "devCommand": "next dev",
+  "env": {
+    "HELIUS_API_KEY": "@helius_api_key",
+    "HELIUS_RPC_URL": "@helius_rpc_url",
+    "PUMPSWAP_PROGRAM_ID": "@pumpswap_program_id",
+    "CONVEX_DEPLOYMENT": "@convex_deployment",
+    "NEXT_PUBLIC_CONVEX_URL": "@next_public_convex_url"
+  },
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "runtime": "nodejs18.x"
+    }
+  }
+}

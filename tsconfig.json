@@ -16,6 +16,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/lib/*": ["./lib/*"],
+      "@/convex/*": ["./convex/*"]
+    },
     "plugins": [
       {
         "name": "next"
