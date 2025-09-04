@@ -139,7 +139,6 @@ async function fetchTokenMetadata(tokenMint: string) {
         symbol: metadata.onChainMetadata?.metadata?.symbol || undefined,
         name: metadata.onChainMetadata?.metadata?.name || undefined,
         decimals: metadata.onChainMetadata?.metadata?.decimals || undefined,
-        logoUri: metadata.offChainMetadata?.metadata?.image || undefined,
       });
       
       console.log(`📝 Stored metadata for ${metadata.onChainMetadata?.metadata?.symbol || tokenMint.slice(0, 8)}`);

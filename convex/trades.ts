@@ -254,7 +254,6 @@ export const addTokenMetadata = mutation({
     symbol: v.optional(v.string()),
     name: v.optional(v.string()),
     decimals: v.optional(v.number()),
-    logoUri: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Check if metadata already exists
@@ -269,12 +268,18 @@ export const addTokenMetadata = mutation({
         symbol: args.symbol || existing.symbol,
         name: args.name || existing.name,
         decimals: args.decimals || existing.decimals,
-        logoUri: args.logoUri || existing.logoUri,
+        lastUpdated: Date.now(),
       });
       return existing._id;
     } else {
       // Create new metadata record
-      return await ctx.db.insert("tokenMetadata", args);
+      return await ctx.db.insert("tokenMetadata", {
+        mint: args.mint,
+        symbol: args.symbol,
+        name: args.name,
+        decimals: args.decimals || 9, // Default to 9 decimals for SPL tokens
+        lastUpdated: Date.now(),
+      });
     }
   },
 });
