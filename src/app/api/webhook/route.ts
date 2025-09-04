@@ -7,20 +7,6 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if webhook is paused
-    const controlResponse = await fetch(`${request.nextUrl.origin}/api/webhook/control`);
-    const controlData = await controlResponse.json();
-    
-    if (controlData.paused) {
-      console.log(`⏸️ Webhook paused: ${controlData.reason}`);
-      return NextResponse.json({ 
-        success: true, 
-        paused: true,
-        reason: controlData.reason,
-        processed: 0 
-      });
-    }
-    
     const body = await request.json();
     console.log('🎣 Webhook received:', body.length || 1, 'transactions');
     
