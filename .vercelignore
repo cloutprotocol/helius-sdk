@@ -1,0 +1,11 @@
+node_modules
+.next
+.env.local
+.git
+*.log
+.DS_Store
+poc/
+scripts/
+helius-sdk/
+.cursor/
+.vscode/
