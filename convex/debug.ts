@@ -74,7 +74,8 @@ export const getUniqueTokenMints = query({
   args: {},
   handler: async (ctx) => {
     const trades = await ctx.db.query("trades").collect();
-    const uniqueMints = [...new Set(trades.map(t => t.tokenMint))];
+    const mintSet = new Set(trades.map(t => t.tokenMint));
+    const uniqueMints = Array.from(mintSet);
     
     return uniqueMints.map(mint => ({
       mint,
