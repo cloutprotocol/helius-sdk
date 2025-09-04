@@ -203,33 +203,35 @@ export const getRecentTrades = query({
   },
 });
 
-// Debug function to check database state
+// Debug function to check database state (optimized for large datasets)
 export const debugDatabaseState = query({
   args: {},
   handler: async (ctx) => {
-    const trades = await ctx.db.query("trades").collect();
-    const tokenCostBasis = await ctx.db.query("tokenCostBasis").collect();
-    const realizedPnl = await ctx.db.query("realizedPnl").collect();
-    const tokenMetadata = await ctx.db.query("tokenMetadata").collect();
+    // Get counts efficiently without loading all data
+    const recentTrades = await ctx.db.query("trades").order("desc").take(1000);
+    const tokenCostBasis = await ctx.db.query("tokenCostBasis").take(100);
+    const realizedPnl = await ctx.db.query("realizedPnl").take(100);
+    const tokenMetadata = await ctx.db.query("tokenMetadata").take(100);
     
-    // Count by direction
-    const buyTrades = trades.filter(t => t.direction === "BUY").length;
-    const sellTrades = trades.filter(t => t.direction === "SELL").length;
+    // Count by direction from recent trades sample
+    const buyTrades = recentTrades.filter(t => t.direction === "BUY").length;
+    const sellTrades = recentTrades.filter(t => t.direction === "SELL").length;
     
     return {
-      totalTrades: trades.length,
+      totalTrades: recentTrades.length, // Sample size, not total
       buyTrades,
       sellTrades,
       tokenCostBasisRecords: tokenCostBasis.length,
       realizedPnlRecords: realizedPnl.length,
       tokenMetadataRecords: tokenMetadata.length,
-      recentTrades: trades.slice(-5).map(t => ({
+      recentTrades: recentTrades.slice(0, 5).map(t => ({
         signature: t.signature.slice(0, 8),
         direction: t.direction,
         tokenAmount: t.tokenAmount,
         solAmount: t.solAmount,
         trader: t.traderAddress.slice(0, 8)
-      }))
+      })),
+      note: "Showing sample of recent 1000 trades due to large dataset"
     };
   },
 });

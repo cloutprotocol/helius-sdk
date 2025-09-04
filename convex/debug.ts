@@ -69,11 +69,11 @@ export const addTokenMetadata = mutation({
   },
 });
 
-// Get all unique token mints from trades
+// Get all unique token mints from trades (limited sample)
 export const getUniqueTokenMints = query({
   args: {},
   handler: async (ctx) => {
-    const trades = await ctx.db.query("trades").collect();
+    const trades = await ctx.db.query("trades").take(1000);
     const mintSet = new Set(trades.map(t => t.tokenMint));
     const uniqueMints = Array.from(mintSet);
     
@@ -82,5 +82,37 @@ export const getUniqueTokenMints = query({
       tradeCount: trades.filter(t => t.tokenMint === mint).length,
       hasMetadata: false // We'll check this separately
     }));
+  },
+});
+
+// Clear all data (use with caution)
+export const clearAllData = mutation({
+  args: {},
+  handler: async (ctx) => {
+    // Delete in batches to avoid timeout
+    const trades = await ctx.db.query("trades").take(1000);
+    const tokenCostBasis = await ctx.db.query("tokenCostBasis").take(1000);
+    const realizedPnl = await ctx.db.query("realizedPnl").take(1000);
+    const tokenMetadata = await ctx.db.query("tokenMetadata").take(1000);
+    const wallets = await ctx.db.query("wallets").take(1000);
+    
+    // Delete all records
+    for (const trade of trades) {
+      await ctx.db.delete(trade._id);
+    }
+    for (const basis of tokenCostBasis) {
+      await ctx.db.delete(basis._id);
+    }
+    for (const pnl of realizedPnl) {
+      await ctx.db.delete(pnl._id);
+    }
+    for (const metadata of tokenMetadata) {
+      await ctx.db.delete(metadata._id);
+    }
+    for (const wallet of wallets) {
+      await ctx.db.delete(wallet._id);
+    }
+    
+    return `Cleared ${trades.length} trades, ${tokenCostBasis.length} cost basis, ${realizedPnl.length} PnL, ${tokenMetadata.length} metadata, ${wallets.length} wallets`;
   },
 });
