@@ -181,10 +181,11 @@ function extractTradeFromTransfers(
   tokenTransfers: any[]
 ) {
   try {
-    // Look for SOL transfers (native transfers)
-    const solTransfer = nativeTransfers.find(transfer => 
-      transfer.amount && Math.abs(transfer.amount) > 1000000 // > 0.001 SOL
-    );
+    // Look for SOL transfers (native transfers) - must be 1+ SOL
+    const solTransfer = nativeTransfers.find(transfer => {
+      const solAmount = Math.abs(transfer.amount || 0);
+      return solAmount >= 1000000000 && solAmount <= 100000000000; // 1-100 SOL
+    });
     
     // Look for token transfers
     const tokenTransfer = tokenTransfers.find(transfer =>
@@ -198,6 +199,12 @@ function extractTradeFromTransfers(
     const solAmount = Math.abs(solTransfer.amount) / 1e9; // Convert lamports to SOL
     const tokenAmount = tokenTransfer.tokenAmount;
     const tokenMint = tokenTransfer.mint;
+    
+    // Final validation: ensure trade meets our 1-100 SOL requirement
+    if (solAmount < 1 || solAmount > 100) {
+      console.log(`❌ Trade ${solAmount} SOL outside 1-100 SOL range, skipping`);
+      return null;
+    }
     
     // Improved trade direction detection
     let traderAddress: string;
@@ -213,29 +220,46 @@ function extractTradeFromTransfers(
     console.log(`  SOL: ${solFromUser?.slice(0, 8)} -> ${solToUser?.slice(0, 8)} (${solAmount} SOL)`);
     console.log(`  Token: ${tokenFromUser?.slice(0, 8)} -> ${tokenToUser?.slice(0, 8)} (${tokenAmount} tokens)`);
     
-    // BUY: User sends SOL, receives tokens
-    if (solFromUser && tokenToUser && solFromUser === tokenToUser) {
-      traderAddress = solFromUser;
+    // More robust trade direction detection for PumpSwap
+    // Look for the user wallet (not program accounts)
+    const programAccounts = new Set([
+      'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA', // PumpSwap program
+      '11111111111111111111111111111111', // System program
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // Token program
+    ]);
+    
+    // Find the user address (not a program account)
+    const allAddresses = [solFromUser, solToUser, tokenFromUser, tokenToUser].filter(Boolean);
+    const userAddress = allAddresses.find(addr => !programAccounts.has(addr));
+    
+    if (!userAddress) {
+      console.log(`❌ No user address found in transfers`);
+      return null;
+    }
+    
+    traderAddress = userAddress;
+    
+    // Determine direction based on user's role in transfers
+    const userSentSol = solFromUser === userAddress;
+    const userReceivedSol = solToUser === userAddress;
+    const userSentTokens = tokenFromUser === userAddress;
+    const userReceivedTokens = tokenToUser === userAddress;
+    
+    if (userSentSol && userReceivedTokens) {
       direction = 'BUY';
-    }
-    // SELL: User sends tokens, receives SOL  
-    else if (tokenFromUser && solToUser && tokenFromUser === solToUser) {
-      traderAddress = tokenFromUser;
+      console.log(`✅ BUY: User sent SOL and received tokens`);
+    } else if (userSentTokens && userReceivedSol) {
       direction = 'SELL';
-    }
-    // Fallback: Use the most common address
-    else {
-      const addresses = [solFromUser, solToUser, tokenFromUser, tokenToUser].filter(Boolean);
-      traderAddress = addresses[0]; // Take first non-null address
-      
-      // Guess direction based on who's sending SOL vs tokens
-      if (solFromUser && tokenToUser) {
-        direction = 'BUY'; // Someone sent SOL, someone received tokens
+      console.log(`✅ SELL: User sent tokens and received SOL`);
+    } else {
+      // Fallback logic
+      if (userSentSol || userReceivedTokens) {
+        direction = 'BUY';
+        console.log(`⚠️ Fallback BUY: User involved in SOL->Token flow`);
       } else {
-        direction = 'SELL'; // Default to SELL if unclear
+        direction = 'SELL';
+        console.log(`⚠️ Fallback SELL: User involved in Token->SOL flow`);
       }
-      
-      console.log(`⚠️  Unclear trade direction, using fallback: ${direction}`);
     }
     
     if (!traderAddress) {
@@ -266,6 +290,6 @@ export async function GET() {
   return NextResponse.json({ 
     status: 'Pump Loss webhook endpoint active',
     timestamp: new Date().toISOString(),
-    program: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'
+    program: 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
   });
 }
