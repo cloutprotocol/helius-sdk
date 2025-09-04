@@ -7,6 +7,20 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if webhook is paused
+    const controlResponse = await fetch(`${request.nextUrl.origin}/api/webhook/control`);
+    const controlData = await controlResponse.json();
+    
+    if (controlData.paused) {
+      console.log(`⏸️ Webhook paused: ${controlData.reason}`);
+      return NextResponse.json({ 
+        success: true, 
+        paused: true,
+        reason: controlData.reason,
+        processed: 0 
+      });
+    }
+    
     const body = await request.json();
     console.log('🎣 Webhook received:', body.length || 1, 'transactions');
     
@@ -80,9 +94,58 @@ async function processTransaction(transaction: any) {
     
     // Store the trade in Convex (single efficient mutation)
     await convex.mutation(api.trades.processTrade, tradeData);
+    
+    // Fetch and store token metadata (async, don't block trade processing)
+    fetchTokenMetadata(tradeData.tokenMint).catch(error => {
+      console.warn(`Failed to fetch metadata for ${tradeData.tokenMint}:`, error);
+    });
+    
     console.log(`✅ Trade stored: ${signature.slice(0, 8)}...`);
   } else {
     console.log(`⚪ No trade data found in: ${signature.slice(0, 8)}...`);
+  }
+}
+
+async function fetchTokenMetadata(tokenMint: string) {
+  try {
+    // Check if we already have metadata for this token
+    const existingMetadata = await convex.query(api.trades.getTokenMetadata, { mint: tokenMint });
+    if (existingMetadata) {
+      return; // Already have metadata
+    }
+    
+    // Fetch from Helius
+    const response = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${process.env.HELIUS_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        mintAccounts: [tokenMint],
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Helius API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const metadata = data[0]; // First result
+    
+    if (metadata && metadata.account) {
+      // Store metadata in Convex
+      await convex.mutation(api.trades.addTokenMetadata, {
+        mint: tokenMint,
+        symbol: metadata.onChainMetadata?.metadata?.symbol || undefined,
+        name: metadata.onChainMetadata?.metadata?.name || undefined,
+        decimals: metadata.onChainMetadata?.metadata?.decimals || undefined,
+        logoUri: metadata.offChainMetadata?.metadata?.image || undefined,
+      });
+      
+      console.log(`📝 Stored metadata for ${metadata.onChainMetadata?.metadata?.symbol || tokenMint.slice(0, 8)}`);
+    }
+  } catch (error) {
+    console.warn(`Failed to fetch token metadata for ${tokenMint}:`, error);
   }
 }
 
@@ -107,28 +170,62 @@ function extractTradeFromTransfers(
       return null;
     }
     
-    // Determine trader address (usually the 'from' address in transfers)
-    const traderAddress = solTransfer.fromUserAccount || tokenTransfer.fromUserAccount;
-    
-    if (!traderAddress) {
-      return null;
-    }
-    
-    // Determine trade direction based on transfer direction
     const solAmount = Math.abs(solTransfer.amount) / 1e9; // Convert lamports to SOL
     const tokenAmount = tokenTransfer.tokenAmount;
     const tokenMint = tokenTransfer.mint;
     
-    // If user is sending SOL and receiving tokens = BUY
-    // If user is sending tokens and receiving SOL = SELL
-    const direction = solTransfer.fromUserAccount === traderAddress ? 'BUY' : 'SELL';
+    // Improved trade direction detection
+    let traderAddress: string;
+    let direction: 'BUY' | 'SELL';
+    
+    // Check if the same address appears in both transfers
+    const solFromUser = solTransfer.fromUserAccount;
+    const solToUser = solTransfer.toUserAccount;
+    const tokenFromUser = tokenTransfer.fromUserAccount;
+    const tokenToUser = tokenTransfer.toUserAccount;
+    
+    console.log(`🔍 Transfer analysis for ${signature.slice(0, 8)}:`);
+    console.log(`  SOL: ${solFromUser?.slice(0, 8)} -> ${solToUser?.slice(0, 8)} (${solAmount} SOL)`);
+    console.log(`  Token: ${tokenFromUser?.slice(0, 8)} -> ${tokenToUser?.slice(0, 8)} (${tokenAmount} tokens)`);
+    
+    // BUY: User sends SOL, receives tokens
+    if (solFromUser && tokenToUser && solFromUser === tokenToUser) {
+      traderAddress = solFromUser;
+      direction = 'BUY';
+    }
+    // SELL: User sends tokens, receives SOL  
+    else if (tokenFromUser && solToUser && tokenFromUser === solToUser) {
+      traderAddress = tokenFromUser;
+      direction = 'SELL';
+    }
+    // Fallback: Use the most common address
+    else {
+      const addresses = [solFromUser, solToUser, tokenFromUser, tokenToUser].filter(Boolean);
+      traderAddress = addresses[0]; // Take first non-null address
+      
+      // Guess direction based on who's sending SOL vs tokens
+      if (solFromUser && tokenToUser) {
+        direction = 'BUY'; // Someone sent SOL, someone received tokens
+      } else {
+        direction = 'SELL'; // Default to SELL if unclear
+      }
+      
+      console.log(`⚠️  Unclear trade direction, using fallback: ${direction}`);
+    }
+    
+    if (!traderAddress) {
+      console.log(`❌ No trader address found`);
+      return null;
+    }
+    
+    console.log(`✅ Detected ${direction} trade by ${traderAddress.slice(0, 8)}`);
     
     return {
       signature,
       blockTime,
       traderAddress,
       tokenMint,
-      direction: direction as 'BUY' | 'SELL',
+      direction,
       tokenAmount,
       solAmount,
     };
@@ -144,6 +241,6 @@ export async function GET() {
   return NextResponse.json({ 
     status: 'Pump Loss webhook endpoint active',
     timestamp: new Date().toISOString(),
-    program: 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
+    program: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'
   });
 }

@@ -13,6 +13,7 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as debug from "../debug.js";
 import type * as leaderboard from "../leaderboard.js";
 import type * as testData from "../testData.js";
 import type * as trades from "../trades.js";
@@ -26,6 +27,7 @@ import type * as trades from "../trades.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  debug: typeof debug;
   leaderboard: typeof leaderboard;
   testData: typeof testData;
   trades: typeof trades;

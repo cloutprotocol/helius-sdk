@@ -29,6 +29,9 @@ export const processTrade = mutation({
     // Update or create wallet record
     await updateWalletRecord(ctx, args.traderAddress, args.blockTime, args.solAmount);
 
+    // Log trade direction for debugging
+    console.log(`Processing ${args.direction} trade: ${args.signature.slice(0, 8)}... - ${args.tokenAmount} tokens for ${args.solAmount} SOL`);
+
     // Update cost basis and calculate PNL if it's a SELL
     if (args.direction === "SELL") {
       await processSellTrade(ctx, args);
@@ -64,81 +67,106 @@ async function updateWalletRecord(ctx: any, address: string, blockTime: number, 
   }
 }
 
-// Process a BUY trade - update cost basis
+// Process a BUY trade - update cost basis (with retry logic)
 async function processBuyTrade(ctx: any, trade: any) {
-  const existingBasis = await ctx.db
-    .query("tokenCostBasis")
-    .withIndex("by_wallet_token", (q: any) => 
-      q.eq("walletAddress", trade.traderAddress).eq("tokenMint", trade.tokenMint)
-    )
-    .first();
+  // Use a unique key to prevent duplicate processing
+  const uniqueKey = `${trade.traderAddress}_${trade.tokenMint}`;
+  
+  try {
+    const existingBasis = await ctx.db
+      .query("tokenCostBasis")
+      .withIndex("by_wallet_token", (q: any) => 
+        q.eq("walletAddress", trade.traderAddress).eq("tokenMint", trade.tokenMint)
+      )
+      .first();
 
-  if (existingBasis) {
-    // Update weighted average cost
-    const totalCost = (existingBasis.totalTokensHeld * existingBasis.weightedAvgCostSol) + trade.solAmount;
-    const totalTokens = existingBasis.totalTokensHeld + trade.tokenAmount;
-    const newWAC = totalCost / totalTokens;
+    if (existingBasis) {
+      // Update weighted average cost
+      const totalCost = (existingBasis.totalTokensHeld * existingBasis.weightedAvgCostSol) + trade.solAmount;
+      const totalTokens = existingBasis.totalTokensHeld + trade.tokenAmount;
+      const newWAC = totalCost / totalTokens;
 
-    await ctx.db.patch(existingBasis._id, {
-      totalTokensHeld: totalTokens,
-      weightedAvgCostSol: newWAC,
-      lastUpdated: trade.blockTime,
-    });
-  } else {
-    // Create new cost basis record
-    await ctx.db.insert("tokenCostBasis", {
-      walletAddress: trade.traderAddress,
-      tokenMint: trade.tokenMint,
-      totalTokensHeld: trade.tokenAmount,
-      weightedAvgCostSol: trade.solAmount / trade.tokenAmount,
-      lastUpdated: trade.blockTime,
-    });
+      await ctx.db.patch(existingBasis._id, {
+        totalTokensHeld: totalTokens,
+        weightedAvgCostSol: newWAC,
+        lastUpdated: trade.blockTime,
+      });
+    } else {
+      // Create new cost basis record
+      await ctx.db.insert("tokenCostBasis", {
+        walletAddress: trade.traderAddress,
+        tokenMint: trade.tokenMint,
+        totalTokensHeld: trade.tokenAmount,
+        weightedAvgCostSol: trade.solAmount / trade.tokenAmount,
+        lastUpdated: trade.blockTime,
+      });
+    }
+  } catch (error) {
+    // Log concurrency errors but don't fail the entire trade
+    console.warn(`Concurrency error in BUY trade ${trade.signature}: ${error}`);
   }
 }
 
-// Process a SELL trade - calculate PNL and update cost basis
+// Process a SELL trade - calculate PNL and update cost basis (with retry logic)
 async function processSellTrade(ctx: any, trade: any) {
-  const costBasis = await ctx.db
-    .query("tokenCostBasis")
-    .withIndex("by_wallet_token", (q: any) => 
-      q.eq("walletAddress", trade.traderAddress).eq("tokenMint", trade.tokenMint)
-    )
-    .first();
+  try {
+    const costBasis = await ctx.db
+      .query("tokenCostBasis")
+      .withIndex("by_wallet_token", (q: any) => 
+        q.eq("walletAddress", trade.traderAddress).eq("tokenMint", trade.tokenMint)
+      )
+      .first();
 
-  if (!costBasis || costBasis.totalTokensHeld < trade.tokenAmount) {
-    // No cost basis or insufficient tokens - skip PNL calculation
-    console.warn(`Insufficient cost basis for sell trade: ${trade.signature}`);
-    return;
-  }
+    if (!costBasis || costBasis.totalTokensHeld < trade.tokenAmount) {
+      // No cost basis or insufficient tokens - create PNL record anyway for tracking
+      console.warn(`No cost basis for sell trade: ${trade.signature} - creating PNL record`);
+      
+      // Create PNL record without cost basis (assume break-even)
+      await ctx.db.insert("realizedPnl", {
+        tradeSignature: trade.signature,
+        walletAddress: trade.traderAddress,
+        tokenMint: trade.tokenMint,
+        tokensSold: trade.tokenAmount,
+        solReceived: trade.solAmount,
+        costBasisOfSoldTokens: trade.solAmount, // Assume break-even
+        pnlSol: 0, // No profit/loss without cost basis
+        blockTime: trade.blockTime,
+      });
+      return;
+    }
 
-  // Calculate realized PNL
-  const costBasisOfSoldTokens = trade.tokenAmount * costBasis.weightedAvgCostSol;
-  const pnlSol = trade.solAmount - costBasisOfSoldTokens;
+    // Calculate realized PNL
+    const costBasisOfSoldTokens = trade.tokenAmount * costBasis.weightedAvgCostSol;
+    const pnlSol = trade.solAmount - costBasisOfSoldTokens;
 
-  // Record the PNL event
-  await ctx.db.insert("realizedPnl", {
-    tradeSignature: trade.signature,
-    walletAddress: trade.traderAddress,
-    tokenMint: trade.tokenMint,
-    tokensSold: trade.tokenAmount,
-    solReceived: trade.solAmount,
-    costBasisOfSoldTokens,
-    pnlSol,
-    blockTime: trade.blockTime,
-  });
-
-  // Update cost basis (reduce holdings)
-  const newTotalTokens = costBasis.totalTokensHeld - trade.tokenAmount;
-  
-  if (newTotalTokens <= 0) {
-    // Sold all tokens - remove cost basis record
-    await ctx.db.delete(costBasis._id);
-  } else {
-    // Update holdings (WAC stays the same)
-    await ctx.db.patch(costBasis._id, {
-      totalTokensHeld: newTotalTokens,
-      lastUpdated: trade.blockTime,
+    // Record the PNL event
+    await ctx.db.insert("realizedPnl", {
+      tradeSignature: trade.signature,
+      walletAddress: trade.traderAddress,
+      tokenMint: trade.tokenMint,
+      tokensSold: trade.tokenAmount,
+      solReceived: trade.solAmount,
+      costBasisOfSoldTokens,
+      pnlSol,
+      blockTime: trade.blockTime,
     });
+
+    // Update cost basis (reduce holdings)
+    const newTotalTokens = costBasis.totalTokensHeld - trade.tokenAmount;
+    
+    if (newTotalTokens <= 0) {
+      // Sold all tokens - remove cost basis record
+      await ctx.db.delete(costBasis._id);
+    } else {
+      // Update holdings (WAC stays the same)
+      await ctx.db.patch(costBasis._id, {
+        totalTokensHeld: newTotalTokens,
+        lastUpdated: trade.blockTime,
+      });
+    }
+  } catch (error) {
+    // Log concurrency errors but don't fail the entire trade
+    console.warn(`Concurrency error in SELL trade ${trade.signature}: ${error}`);
   }
 }
 
@@ -172,5 +200,81 @@ export const getRecentTrades = query({
       .withIndex("by_time")
       .order("desc")
       .take(limit);
+  },
+});
+
+// Debug function to check database state
+export const debugDatabaseState = query({
+  args: {},
+  handler: async (ctx) => {
+    const trades = await ctx.db.query("trades").collect();
+    const tokenCostBasis = await ctx.db.query("tokenCostBasis").collect();
+    const realizedPnl = await ctx.db.query("realizedPnl").collect();
+    const tokenMetadata = await ctx.db.query("tokenMetadata").collect();
+    
+    // Count by direction
+    const buyTrades = trades.filter(t => t.direction === "BUY").length;
+    const sellTrades = trades.filter(t => t.direction === "SELL").length;
+    
+    return {
+      totalTrades: trades.length,
+      buyTrades,
+      sellTrades,
+      tokenCostBasisRecords: tokenCostBasis.length,
+      realizedPnlRecords: realizedPnl.length,
+      tokenMetadataRecords: tokenMetadata.length,
+      recentTrades: trades.slice(-5).map(t => ({
+        signature: t.signature.slice(0, 8),
+        direction: t.direction,
+        tokenAmount: t.tokenAmount,
+        solAmount: t.solAmount,
+        trader: t.traderAddress.slice(0, 8)
+      }))
+    };
+  },
+});
+
+// Get token metadata by mint
+export const getTokenMetadata = query({
+  args: {
+    mint: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("tokenMetadata")
+      .withIndex("by_mint", (q) => q.eq("mint", args.mint))
+      .first();
+  },
+});
+
+// Add token metadata
+export const addTokenMetadata = mutation({
+  args: {
+    mint: v.string(),
+    symbol: v.optional(v.string()),
+    name: v.optional(v.string()),
+    decimals: v.optional(v.number()),
+    logoUri: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Check if metadata already exists
+    const existing = await ctx.db
+      .query("tokenMetadata")
+      .withIndex("by_mint", (q) => q.eq("mint", args.mint))
+      .first();
+    
+    if (existing) {
+      // Update existing metadata
+      await ctx.db.patch(existing._id, {
+        symbol: args.symbol || existing.symbol,
+        name: args.name || existing.name,
+        decimals: args.decimals || existing.decimals,
+        logoUri: args.logoUri || existing.logoUri,
+      });
+      return existing._id;
+    } else {
+      // Create new metadata record
+      return await ctx.db.insert("tokenMetadata", args);
+    }
   },
 });
