@@ -37,6 +37,3 @@ export async function GET() {
     reason: pauseReason 
   });
 }
-
-// Export the pause state for use in webhook route
-export { webhookPaused, pauseReason };
